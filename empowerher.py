@@ -82,7 +82,7 @@ def translate(text, target):
         return text
 
 
-def ask(prompt):
+def ask(prompt, lang_name="English"):
     key = secret("GEMINI_API_KEY") or st.session_state.get("ai_key")
     if not key:
         st.info("Add a Gemini key in the sidebar to chat.")
@@ -95,7 +95,7 @@ def ask(prompt):
                 f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
                 headers={"x-goog-api-key": key},
                 json={"systemInstruction": {"parts": [{"text": SYSTEM}]},
-                      "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                      "contents": [{"role": "user", "parts": [{"text": prompt + f"\n\nReply entirely in {lang_name}. Finish every point."}]}],
                       "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048}}, timeout=60)
         except requests.RequestException:
             last = "network error"
@@ -170,11 +170,10 @@ with tab_help:
         st.subheader(f"Ask about {topic}")
         q = st.text_input("Your question")
         if q:
-            code = LANGS[lang_name]
             with st.spinner("Thinking..."):
-                ans = ask(f"Topic: {topic}. Question: {translate(q, 'en')}")
+                ans = ask(f"Topic: {topic}. Question: {q}", lang_name)
             if ans:
-                st.markdown("**EmpowerHER:** " + translate(ans, code))
+                st.markdown("**EmpowerHER:** " + ans)
     else:
         st.write("Pick a topic to get started.")
     with st.expander("📺 Learn more on YouTube", expanded=bool(topic)):
