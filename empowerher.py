@@ -71,11 +71,7 @@ def ask(prompt):
     return ""
 
 
-def send_sos(location_text, contacts):
-    sid, token, sender = secret("TWILIO_SID"), secret("TWILIO_AUTH_TOKEN"), secret("TWILIO_PHONE")
-    if not (sid and token and sender):
-        st.warning("SMS sending is not configured on this deployment. Your alert text is below to copy and send.")
-        return False
+def send_sos(location_text, contacts, sid, token, sender):
     body = f"EMERGENCY: I need help. My location: {location_text}"
     ok = True
     for num in contacts:
@@ -85,7 +81,7 @@ def send_sos(location_text, contacts):
             st.success(f"Alert sent to {num}")
         else:
             ok = False
-            st.error(f"Could not send to {num} (status {r.status_code}).")
+            st.error(f"Could not send to {num} (status {r.status_code}). Check your Twilio details and that the number is verified on your account.")
     return ok
 
 
@@ -117,13 +113,22 @@ with tab_help:
         st.write("Pick a topic to get started.")
 
 with tab_sos:
-    st.write("Send your location to people you trust. Contacts and location stay in this session.")
+    st.write("Send your location to people you trust. Everything you enter stays in this session.")
     loc = st.text_input("Your location (address, landmark or a Google Maps link)")
     raw = st.text_area("Emergency contact numbers, one per line, with country code (e.g. +91XXXXXXXXXX)", height=100)
     contacts = [c.strip() for c in raw.splitlines() if re.fullmatch(r"\+\d{8,15}", c.strip())]
-    if st.button("🚨 Send SOS", type="primary", disabled=not (loc.strip() and contacts)):
-        msg = f"EMERGENCY: I need help. My location: {loc}"
-        send_sos(loc, contacts)
+    with st.expander("SMS sending: use your own Twilio account", expanded=True):
+        sid = st.text_input("Twilio Account SID", value=secret("TWILIO_SID") or "")
+        token = st.text_input("Twilio Auth Token", type="password", value=secret("TWILIO_AUTH_TOKEN") or "")
+        sender = st.text_input("Your Twilio phone number (e.g. +1XXXXXXXXXX)", value=secret("TWILIO_PHONE") or "")
+        st.caption("Free trial accounts at twilio.com can message numbers verified on that account. Your details are never stored.")
+    msg = f"EMERGENCY: I need help. My location: {loc}"
+    ready = bool(loc.strip() and contacts)
+    if st.button("🚨 Send SOS", type="primary", disabled=not ready):
+        if sid and token and sender:
+            send_sos(loc, contacts, sid.strip(), token.strip(), sender.strip())
+        else:
+            st.warning("Add your Twilio details above to send the SMS. Your alert text is ready to copy:")
         st.code(msg)
 
 st.caption("Built by Pooja J with Streamlit, Google Gemini and Twilio.")
