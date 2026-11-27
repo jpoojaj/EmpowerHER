@@ -1,4 +1,6 @@
 import re
+import urllib.parse
+
 import requests
 import streamlit as st
 from deep_translator import GoogleTranslator
@@ -8,7 +10,8 @@ st.set_page_config(page_title="EmpowerHER", page_icon="💜", layout="wide")
 MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 SYSTEM = ("You are EmpowerHER, a warm, practical assistant supporting women. You give clear guidance on "
           "legal rights (Indian context), self-defense, mental health, period wellness, career and "
-          "education, and personal safety. Keep answers short, kind and actionable.")
+          "education, and personal safety. Keep answers short, kind and actionable. Always finish every "
+          "point and list you start; never stop mid-sentence or mid-list.")
 TOPICS = {
     "📜 Legal rights": "legal rights",
     "🛡️ Self defense": "self defense",
@@ -19,6 +22,40 @@ TOPICS = {
 }
 LANGS = {"English": "en", "Hindi": "hi", "Kannada": "kn", "Tamil": "ta", "Telugu": "te",
          "Spanish": "es", "French": "fr", "Arabic": "ar"}
+
+YOUTUBE = {
+    "legal rights": [
+        ("Legal Rights Every Woman in India Must Know - Girl Power Talk", "https://www.youtube.com/watch?v=sTQpuAqMkkM"),
+        ("Legal Protections Against Discrimination in India - LawWiser", "https://www.youtube.com/watch?v=BKr8gR0iQhc"),
+    ],
+    "self defense": [
+        ("The 15 Most Important Women's Self-defense Techniques - Gracie Jiu-Jitsu Academy", "https://www.youtube.com/watch?v=ikoUEjb3qP4"),
+        ("5 Self-Defense Moves Every Woman Should Know - Joanna Soh", "https://www.youtube.com/watch?v=KVpxP3ZZtAc"),
+    ],
+    "mental health": [
+        ("Under the Surface: Women's Mental Health - BBC StoryWorks", "https://www.youtube.com/watch?v=-d52C1sphVg"),
+        ("Women's Mental Health & Supporting Women in Your Life - Tava Health", "https://www.youtube.com/watch?v=_vFc9iy26o8"),
+    ],
+    "period and wellness": [
+        ("Menstruation & Menstrual Hygiene - Medicover Hospitals", "https://www.youtube.com/watch?v=UBhiwkM8MIY"),
+        ("Menstrual Hygiene Management - IFRC", "https://www.youtube.com/watch?v=kd_gR_S-rGw"),
+    ],
+    "career and education": [
+        ("Women in Technology & Engineering: Career Insights - National Skills Network", "https://www.youtube.com/watch?v=3xQCHVrKG10"),
+        ("Career Gap to Comeback: A Reality Check for Women - Shivangi Shrivastava", "https://www.youtube.com/watch?v=TBKaohIalUM"),
+    ],
+    "self-love": [
+        ("How to Build Self-Confidence - Temi Akinbo", "https://www.youtube.com/watch?v=QHjzdOho-pc"),
+        ("The Self-Worth Advice Every Woman Needs to Hear - Lisa Bilyeu", "https://www.youtube.com/watch?v=IbriO6QIxoU"),
+    ],
+}
+HELPLINES = [
+    ("Emergency (police, fire, ambulance)", "112"),
+    ("Women Helpline", "181"),
+    ("NCW Women Helpline", "14490"),
+    ("Cyber Crime Helpline", "1930"),
+    ("KIRAN Mental Health Helpline", "1800-599-0019"),
+]
 
 st.markdown("""<style>
 .hero{padding:1.8rem 2rem;border-radius:18px;background:linear-gradient(135deg,#8E44AD,#E84393);color:#fff;margin-bottom:1.2rem}
@@ -52,15 +89,24 @@ def ask(prompt):
         return ""
     last = None
     for m in MODELS:
-        r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
-            headers={"x-goog-api-key": key},
-            json={"systemInstruction": {"parts": [{"text": SYSTEM}]},
-                  "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                  "generationConfig": {"temperature": 0.7, "maxOutputTokens": 700}}, timeout=60)
+        try:
+            r = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+                headers={"x-goog-api-key": key},
+                json={"systemInstruction": {"parts": [{"text": SYSTEM}]},
+                      "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                      "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048}}, timeout=60)
+        except requests.RequestException:
+            last = "network error"
+            continue
         if r.status_code == 200:
             try:
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                candidate = r.json()["candidates"][0]
+                text = candidate["content"]["parts"][0]["text"].strip()
+                if text:
+                    return text
+                last = "empty"
+                continue
             except Exception:
                 last = "empty"
                 continue
@@ -69,6 +115,22 @@ def ask(prompt):
             break
     st.error(f"The AI service returned status {last}. Check the key and try again.")
     return ""
+
+
+def show_youtube(topic=None):
+    topics = [topic] if topic in YOUTUBE else list(YOUTUBE)
+    for t in topics:
+        st.markdown(f"**{t.capitalize()}**")
+        for title, url in YOUTUBE[t]:
+            st.markdown(f"- [{title}]({url})")
+        more = urllib.parse.quote_plus(f"{t} for women")
+        st.markdown(f"- [More {t} videos on YouTube](https://www.youtube.com/results?search_query={more})")
+
+
+def show_helplines():
+    st.markdown("Free 24x7 helplines in India:")
+    for name, number in HELPLINES:
+        st.markdown(f"- **{name}:** [{number}](tel:{number.replace('-', '')})")
 
 
 def send_sos(location_text, contacts, sid, token, sender):
@@ -91,6 +153,8 @@ with st.sidebar:
     if not secret("GEMINI_API_KEY"):
         st.text_input("Gemini API key (this session only)", type="password", key="ai_key")
         st.caption("Free key at aistudio.google.com/apikey")
+    with st.expander("📞 Helplines (India)"):
+        show_helplines()
 
 tab_help, tab_sos = st.tabs(["💬 Get help", "🚨 SOS alert"])
 
@@ -111,9 +175,15 @@ with tab_help:
                 st.markdown("**EmpowerHER:** " + translate(ans, code))
     else:
         st.write("Pick a topic to get started.")
+    with st.expander("📺 Learn more on YouTube", expanded=bool(topic)):
+        show_youtube(topic)
+    with st.expander("📞 Helplines (India)"):
+        show_helplines()
 
 with tab_sos:
     st.write("Send your location to people you trust. Everything you enter stays in this session.")
+    with st.expander("📞 Helplines (India)", expanded=False):
+        show_helplines()
     loc = st.text_input("Your location (address, landmark or a Google Maps link)")
     raw = st.text_area("Emergency contact numbers, one per line, with country code (e.g. +91XXXXXXXXXX)", height=100)
     contacts = [c.strip() for c in raw.splitlines() if re.fullmatch(r"\+\d{8,15}", c.strip())]
