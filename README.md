@@ -1,5 +1,7 @@
 # 💜 EmpowerHER
 
+**Live demo:** https://pooja-empowerher.streamlit.app/
+
 A multilingual AI companion for women's support, built with Streamlit.
 
 ## Features
