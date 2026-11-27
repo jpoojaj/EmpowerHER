@@ -5,7 +5,7 @@ from deep_translator import GoogleTranslator
 
 st.set_page_config(page_title="EmpowerHER", page_icon="💜", layout="wide")
 
-MODELS = ["llama-3.1-8b-instant", "llama-3.3-70b-versatile"]
+MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 SYSTEM = ("You are EmpowerHER, a warm, practical assistant supporting women. You give clear guidance on "
           "legal rights (Indian context), self-defense, mental health, period wellness, career and "
           "education, and personal safety. Keep answers short, kind and actionable.")
@@ -46,21 +46,26 @@ def translate(text, target):
 
 
 def ask(prompt):
-    key = secret("GROQ_API_KEY") or st.session_state.get("groq_key")
+    key = secret("GEMINI_API_KEY") or st.session_state.get("ai_key")
     if not key:
-        st.info("Add a Groq key in the sidebar to chat.")
+        st.info("Add a Gemini key in the sidebar to chat.")
         return ""
     last = None
     for m in MODELS:
-        r = requests.post("https://api.groq.com/openai/v1/chat/completions",
-                          headers={"Authorization": f"Bearer {key}"},
-                          json={"model": m, "temperature": 0.7, "max_tokens": 600,
-                                "messages": [{"role": "system", "content": SYSTEM},
-                                             {"role": "user", "content": prompt}]}, timeout=60)
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+            headers={"x-goog-api-key": key},
+            json={"systemInstruction": {"parts": [{"text": SYSTEM}]},
+                  "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                  "generationConfig": {"temperature": 0.7, "maxOutputTokens": 700}}, timeout=60)
         if r.status_code == 200:
-            return r.json()["choices"][0]["message"]["content"].strip()
+            try:
+                return r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except Exception:
+                last = "empty"
+                continue
         last = r.status_code
-        if last in (401, 403):
+        if last in (400, 401, 403):
             break
     st.error(f"The AI service returned status {last}. Check the key and try again.")
     return ""
@@ -87,9 +92,9 @@ def send_sos(location_text, contacts):
 with st.sidebar:
     st.header("Settings")
     lang_name = st.selectbox("🌐 Language", list(LANGS))
-    if not secret("GROQ_API_KEY"):
-        st.text_input("Groq API key (this session only)", type="password", key="groq_key")
-        st.caption("Free key at console.groq.com")
+    if not secret("GEMINI_API_KEY"):
+        st.text_input("Gemini API key (this session only)", type="password", key="ai_key")
+        st.caption("Free key at aistudio.google.com/apikey")
 
 tab_help, tab_sos = st.tabs(["💬 Get help", "🚨 SOS alert"])
 
@@ -121,4 +126,4 @@ with tab_sos:
         send_sos(loc, contacts)
         st.code(msg)
 
-st.caption("Built by Pooja J with Streamlit, Groq and Twilio.")
+st.caption("Built by Pooja J with Streamlit, Google Gemini and Twilio.")
