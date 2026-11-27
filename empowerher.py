@@ -7,7 +7,7 @@ from deep_translator import GoogleTranslator
 
 st.set_page_config(page_title="EmpowerHER", page_icon="💜", layout="wide")
 
-MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
 SYSTEM = ("You are EmpowerHER, a warm, practical assistant supporting women. You give clear guidance on "
           "legal rights (Indian context), self-defense, mental health, period wellness, career and "
           "education, and personal safety. Keep answers short, kind and actionable. Always finish every "
@@ -88,6 +88,7 @@ def ask(prompt):
         st.info("Add a Gemini key in the sidebar to chat.")
         return ""
     last = None
+    tried = []
     for m in MODELS:
         try:
             r = requests.post(
@@ -111,9 +112,10 @@ def ask(prompt):
                 last = "empty"
                 continue
         last = r.status_code
-        if last in (400, 401, 403):
+        tried.append(f"{m}: {last}")
+        if last in (401, 403):
             break
-    st.error(f"The AI service returned status {last}. Check the key and try again.")
+    st.error(f"The AI service could not answer ({'; '.join(tried) or last}). Please try again in a moment.")
     return ""
 
 
