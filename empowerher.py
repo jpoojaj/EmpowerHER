@@ -1,4 +1,5 @@
 import re
+import time
 import urllib.parse
 
 import requests
@@ -7,7 +8,7 @@ from deep_translator import GoogleTranslator
 
 st.set_page_config(page_title="EmpowerHER", page_icon="💜", layout="wide")
 
-MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash"]
+MODELS = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-flash-lite-latest"]
 SYSTEM = ("You are EmpowerHER, a warm, practical assistant supporting women. You give clear guidance on "
           "legal rights (Indian context), self-defense, mental health, period wellness, career and "
           "education, and personal safety. Keep answers short, kind and actionable. Always finish every "
@@ -89,32 +90,35 @@ def ask(prompt, lang_name="English"):
         return ""
     last = None
     tried = []
-    for m in MODELS:
-        try:
-            r = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
-                headers={"x-goog-api-key": key},
-                json={"systemInstruction": {"parts": [{"text": SYSTEM}]},
-                      "contents": [{"role": "user", "parts": [{"text": prompt + f"\n\nReply entirely in {lang_name}. Finish every point."}]}],
-                      "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048}}, timeout=60)
-        except requests.RequestException:
-            last = "network error"
-            continue
-        if r.status_code == 200:
+    for attempt in range(3):
+        for m in MODELS:
             try:
-                candidate = r.json()["candidates"][0]
-                text = candidate["content"]["parts"][0]["text"].strip()
-                if text:
-                    return text
+                r = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent",
+                    headers={"x-goog-api-key": key},
+                    json={"systemInstruction": {"parts": [{"text": SYSTEM}]},
+                          "contents": [{"role": "user", "parts": [{"text": prompt + f"\n\nReply entirely in {lang_name}. Finish every point."}]}],
+                          "generationConfig": {"temperature": 0.7, "maxOutputTokens": 2048}}, timeout=60)
+            except requests.RequestException:
+                last = "network error"
+                continue
+            if r.status_code == 200:
+                try:
+                    text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    if text:
+                        return text
+                except Exception:
+                    pass
                 last = "empty"
                 continue
-            except Exception:
-                last = "empty"
-                continue
-        last = r.status_code
-        tried.append(f"{m}: {last}")
-        if last in (401, 403):
-            break
+            last = r.status_code
+            tried.append(f"{m}: {last}")
+            if last in (401, 403):
+                break
+        else:
+            time.sleep(2 * (attempt + 1))
+            continue
+        break
     st.error(f"The AI service could not answer ({'; '.join(tried) or last}). Please try again in a moment.")
     return ""
 
